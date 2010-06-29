@@ -1,0 +1,1 @@
+from xls import XlsReader
