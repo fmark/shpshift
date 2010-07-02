@@ -125,10 +125,10 @@ if __name__ == '__main__':
     except ValueError, e:
         print_error("problem reading spreadsheet: %s" % str(e))
 
-    fields = shpshift.set_field_geometry(reader.fields, geom_val, geom_is_xy, geom_is_numeric)
-    print reader.row(0)    
+    reader.set_field_geom(geom_val, geom_is_xy, geom_is_numeric)
     
-    writer = shpshift.ShpWriter(output_filename, fields=fields, srs=options.srs, overwrite=options.overwrite)
+    writer = shpshift.ShpWriter(output_filename, reader=reader, srs=options.srs, overwrite=options.overwrite)
+    writer.write()
     
 
     

@@ -11,6 +11,10 @@ Column = namedtuple('Column', 'name type geometry')
 class InvalidFilenameError(ValueError):
     pass
 
+class InvalidGeometryError(ValueError):
+    pass
+
+
 def set_field_geometry(fields, geom_val, geom_is_xy, geom_is_numeric):
     if geom_is_numeric:
         if geom_is_xy:

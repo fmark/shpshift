@@ -1,10 +1,6 @@
 import datetime
 import xlrd
-from util import Header
-from util import Column
-from util import ColumnType
-from util import ColumnGeometry
-
+from util import *
 
 class XlsReader(object): 
     def __init__(self, filename=None, sheet_number=0, header=Header.AUTODETECT, file_contents=None):
@@ -135,3 +131,6 @@ class XlsReader(object):
 
         # All cells in the second row are text
         return Header.NONE
+
+    def set_field_geom(self, geom_val, geom_is_xy, geom_is_numeric):
+        self.__fields = set_field_geometry(self.fields, geom_val, geom_is_xy, geom_is_numeric)

@@ -15,11 +15,18 @@ from util import ColumnType
 from util import ColumnGeometry
 from util import InvalidFilenameError
 
+ogr.UseExceptions()
+
 class ShpWriter(object): 
-    def __init__(self, filename, fields, srs=None, overwrite=False):
+    def __init__(self, filename, reader, srs=None, overwrite=False):
         self._filename = filename
-        self._fields = fields
-        self._srs = srs
+        self._reader = reader
+        if srs is None: 
+            self._srs = None
+        else:
+            self._srs = osr.SpatialReference()
+            self._srs.SetFromUserInput(srs)
+
         self._overwrite = overwrite
         if overwrite:
             self._delete_any_shapefiles()
@@ -27,7 +34,43 @@ class ShpWriter(object):
         if len(shps) > 0:
             raise IOError, "Files %s and '%s' already exist.  Use '--force' to overwrite." % (
                 ', '.join(["'%s'" % s for s in shps[:-1]]), shps[-1])
-            
+        self._detect_geom()
+        self._create_shp()
+        self._add_fields()
+
+    def _write_row(self, row, lyr_dfn):
+        # write attributes
+        try:
+            feat = ogr.Feature(lyr_dfn)
+            # Set field values
+            for i, f in enumerate(self._reader.fields):
+                feat.SetField(i, row[i])
+            # Create geometry
+            if len(self._geom_cols) == 1:
+                geom = ogr.CreateGeometryFromWkt(row[self._geom_cols[0]])
+            else:
+                for field_idx in self._geom_cols:
+                    if self._reader.fields[field_idx].geometry == ColumnGeometry.X:
+                        x = row[field_idx]
+                    elif self._reader.fields[field_idx].geometry == ColumnGeometry.Y:
+                        y = row[field_idx]
+                geom = ogr.Geometry(ogr.wkbPoint)
+                geom.SetPoint_2D(0, x, y)
+            # Save geometry
+            feat.SetGeometry(geom)
+            self._lyr.CreateFeature(feat)
+        finally:
+            feat.Destroy()
+
+    def write_row(self, row_idx):
+        lyr_dfn = self._lyr.GetLayerDefn()
+        row = self._reader.row(row_idx)
+        self._write_row(row, lyr_dfn)
+                
+    def write(self):
+        lyr_dfn = self._lyr.GetLayerDefn()
+        for row in self._reader.read():
+            self._write_row(row, lyr_dfn)
 
     def _find_shapefiles(self):
         shp_exts = ['.shp', '.shx', '.dbf', '.prj', '.sbn', '.sbx', '.qix']
@@ -36,7 +79,6 @@ class ShpWriter(object):
         nameroot, nameext = os.path.splitext(os.path.basename(absname))
 
         files = []
-
         for f in glob.glob("%s%s%s%s" % (dir, os.path.sep, nameroot, '.*')):
             _, ext = os.path.splitext(f)
             if ext in shp_exts:
@@ -45,3 +87,77 @@ class ShpWriter(object):
     def _delete_any_shapefiles(self):
         for f in self._find_shapefiles():
             os.unlink(f)
+
+    def _create_shp(self):
+        drv = ogr.GetDriverByName('ESRI Shapefile')
+        self._ds = drv.CreateDataSource(self._filename)
+        self._lyr = self._ds.CreateLayer( "points", self._srs, self._geom_type)
+
+    def _add_fields(self):
+        def fields_to_ogr(fields):
+            lookup = {ColumnType.REAL: ogr.OFTReal,
+                      ColumnType.INT: ogr.OFTInteger,
+                      ColumnType.STRING: ogr.OFTString,
+                      ColumnType.DATE: ogr.OFTDate,
+                      ColumnType.TIME: ogr.OFTTime,
+                      ColumnType.DATETIME: ogr.OFTDateTime,
+                      ColumnType.BOOL: ogr.OFTInteger}
+            return [(f.name, lookup[f.type]) for f in fields]
+
+        for name, type in fields_to_ogr(self._reader.fields):
+            try:
+                field_defn = ogr.FieldDefn(name, type)
+                self._lyr.CreateField(field_defn)
+            finally:
+                field_defn.Destroy()
+
+    def _detect_geom(self):
+        self._geom_cols = []
+        found = set()
+        for i, f in enumerate(self._reader.fields):
+            if f.geometry == ColumnGeometry.GEOM:
+                self._geom_cols = [i]
+                self._geom_type = self._detect_geom_type(i)
+                break
+            elif f.geometry == ColumnGeometry.X and not 'x' in found:
+                self._geom_cols.append(i)
+                self._geom_type = ogr.wkbPoint
+                found.add('x')
+                if len(self._geom_cols) >= 2:
+                    break
+            elif f.geometry == ColumnGeometry.Y and not 'y' in found:
+                self._geom_cols.append(i)
+                self._geom_type = ogr.wkbPoint
+                found.add('y')
+                if len(self._geom_cols) >= 2:
+                    break
+        if len(self._geom_cols) == 0:
+            raise InvalidGeometryError, "No geometry column set"
+                
+    def _detect_geom_type(self, colnum):
+        row = self._reader.row(0)
+        cell = row[colnum]
+        #delete whitespace
+        cellstr = ''.join(str(cell).split())
+        geom_type = cellstr.split('(')[0].lower()
+        lookup_geom = {'geometry': ogr.wkbUnknown,
+                       'point': ogr.wkbPoint,
+                       'linestring': ogr.wkbLineString,
+                       'polygon': ogr.wkbPolygon,
+                       'multipoint': ogr.wkbMultiPoint,
+                       'multilinestring': ogr.wkbMultiLineString,
+                       'multipolygon': ogr.wkbMultiPolygon,
+                       'geometrycollection': ogr.wkbGeometryCollection,
+                       'pointz': ogr.wkbPoint25D,
+                       'linestring': ogr.wkbLineString25D,
+                       'polygonz': ogr.wkbPolygon25D,
+                       'multipointz': ogr.wkbMultiPoint25D,
+                       'multilinestringz': ogr.wkbMultiLineString25D,
+                       'multipolygonz': ogr.wkbMultiPolygon25D,
+                       'geometrycollectionz': ogr.wkbGeometryCollection25D}
+        try:
+            return lookup_geom[geom_type]
+        except KeyError:
+            raise InvalidGeometryError, "Could not determine geometry type for '%s'" % cell
+                       
+                           
