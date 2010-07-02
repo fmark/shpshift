@@ -1,7 +1,10 @@
+import datetime
 import xlrd
 from util import Header
 from util import Column
 from util import ColumnType
+from util import ColumnGeometry
+
 
 class XlsReader(object): 
     def __init__(self, filename=None, sheet_number=0, header=Header.AUTODETECT, file_contents=None):
@@ -14,6 +17,7 @@ class XlsReader(object):
         self._file_contents = file_contents
         self._sheet_number = sheet_number
         self._header = header
+        self.__fields = None # for caching the call to fields() in
         # open book for reading
         if self._filename is None:
             try:
@@ -41,14 +45,42 @@ class XlsReader(object):
             return ColumnType.REAL
         else:
             return ColumnType.INT
+        
+    @property
+    def _body_start_row(self):
+        return (1 if self._header == Header.FIRSTROW else 0)
+    
+    def _translate(self, cell, column):
+        if cell.ctype in [xlrd.XL_CELL_EMPTY,
+                          xlrd.XL_CELL_BLANK,
+                          xlrd.XL_CELL_ERROR]:
+            return None
+        translate = {ColumnType.STRING: (lambda x: x),
+                     ColumnType.INT: int,
+                     ColumnType.REAL: float,
+                     ColumnType.DATETIME: (lambda x: datetime.datetime(*xlrd.xldate_as_tuple(float(x), self._book.datemode))),
+                     ColumnType.BOOL: bool}
+        return translate[column.type](cell.value)
 
+    def row(self, idx):
+        return [self._translate(cell, self.fields[i]) for i, cell in enumerate(self._sheet.row(idx + self._body_start_row))]
+
+    def read(self):
+        f = self.fields
+        t = self._translate
+        for i in xrange(self._body_start_row, self._sheet.nrows):
+            yield [t(cell, f[i]) for i, cell in enumerate(self._sheet.row(i))]
+
+    @property
     def fields(self):
+        if not self. __fields is None:
+            return self.__fields
+
+        typerow_idx = self._body_start_row
         # get the fieldnames, and find the index of the first value row
         if self._header == Header.FIRSTROW:
-            typerow_idx = 1
             col_names = [str(x.value) for x in self._sheet.row(0)]
         else:
-            typerow_idx = 0
             col_names = ["Field%03d" % x for x in range(len(typerow))]
 
         # detect the datatypes of the cells.  If the cell is blank, skip it and try the next row
@@ -70,7 +102,7 @@ class XlsReader(object):
                 elif cell.ctype == xlrd.XL_CELL_DATE:
                     types[colnum] = ColumnType.DATETIME
                 elif cell.ctype == xlrd.XL_CELL_BOOLEAN:
-                    types[colnum] = ColumnType.INT
+                    types[colnum] = ColumnType.BOOL
                 elif cell.ctype == xlrd.XL_CELL_ERROR:
                     continue
                 untyped_cols.remove(colnum)
@@ -78,7 +110,9 @@ class XlsReader(object):
         # Any column we can't detect the type of defaults to string
         for colnum in untyped_cols:
             types[colnum] = ColumnType.STRING
-        return zip(col_names, types)
+#         self.__fields = zip(col_names, types)
+        self.__fields = [Column(col_names[i], types[i], ColumnGeometry.NONE) for i in xrange(0, ncols)]
+        return self.__fields
 
     def detect_header_type(self):
         """
@@ -89,6 +123,7 @@ class XlsReader(object):
          * At least one cell in the second row is not of type 'text'
 
         """
+        self.__fields = None
 
         for cell in self._sheet.row(0):
             if cell.ctype != xlrd.XL_CELL_TEXT:
@@ -100,7 +135,3 @@ class XlsReader(object):
 
         # All cells in the second row are text
         return Header.NONE
-
-
-    def read(self):
-        pass
