@@ -28,10 +28,10 @@ def set_field_geometry(fields, geom_val, geom_is_xy, geom_is_numeric):
             for i, f in enumerate(list(fields)):
                 if len(found) >= 2:
                     break
-                if f.name == geom_val[0]:
+                if f.name.lower() == geom_val[0].lower():
                     fields[i] = Column(f.name, f.type, ColumnGeometry.X)
                     found.add('x')
-                elif f.name == geom_val[1]:
+                elif f.name.lower() == geom_val[1].lower():
                     fields[i] = Column(f.name, f.type, ColumnGeometry.Y)
                     found.add('y')
             if len(found) != 2:
@@ -39,7 +39,7 @@ def set_field_geometry(fields, geom_val, geom_is_xy, geom_is_numeric):
         else:
             found = False
             for i, f in enumerate(list(fields)):
-                if f.name == geom_val:
+                if f.name.lower() == geom_val.lower():
                     fields[i] = Column(f.name, f.type, ColumnGeometry.GEOM)
                     found = True
                     break
