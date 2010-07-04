@@ -51,7 +51,7 @@ class XlsReader(object):
                           xlrd.XL_CELL_BLANK,
                           xlrd.XL_CELL_ERROR]:
             return None
-        translate = {ColumnType.STRING: (lambda x: x),
+        translate = {ColumnType.STRING: unicode,
                      ColumnType.INT: int,
                      ColumnType.REAL: float,
                      ColumnType.DATETIME: (lambda x: datetime.datetime(*xlrd.xldate_as_tuple(float(x), self._book.datemode))),

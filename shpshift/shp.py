@@ -27,6 +27,7 @@ class ShpWriter(object):
             self._srs = osr.SpatialReference()
             self._srs.SetFromUserInput(srs)
 
+        self._drv = ogr.GetDriverByName('ESRI Shapefile')
         self._overwrite = overwrite
         if overwrite:
             self._delete_any_shapefiles()
@@ -38,15 +39,21 @@ class ShpWriter(object):
         self._create_shp()
         self._add_fields()
 
+
     def _write_row(self, row, lyr_dfn):
         # write attributes
         try:
             feat = ogr.Feature(lyr_dfn)
             # Set field values
             for i, f in enumerate(self._reader.fields):
+                # Need to check if utf-8 is widely supported
+                if not row[i] is None and f.type == ColumnType.STRING:
+                    row[i] = row[i].encode('utf-8')
                 feat.SetField(i, row[i])
             # Create geometry
             if len(self._geom_cols) == 1:
+                if row[self._geom_cols[0]] is None:
+                    return
                 geom = ogr.CreateGeometryFromWkt(row[self._geom_cols[0]])
             else:
                 for field_idx in self._geom_cols:
@@ -54,6 +61,8 @@ class ShpWriter(object):
                         x = row[field_idx]
                     elif self._reader.fields[field_idx].geometry == ColumnGeometry.Y:
                         y = row[field_idx]
+                if x is None or y is None:
+                    return
                 geom = ogr.Geometry(ogr.wkbPoint)
                 geom.SetPoint_2D(0, x, y)
             # Save geometry
@@ -73,7 +82,11 @@ class ShpWriter(object):
             self._write_row(row, lyr_dfn)
 
     def _find_shapefiles(self):
-        shp_exts = ['.shp', '.shx', '.dbf', '.prj', '.sbn', '.sbx', '.qix']
+        shp_exts = ['.shp', '.shx', '.dbf', '.prj', '.sbn', '.sbx', 
+                    '.qix', '.fbn', '.fbx', '.ain', '.aih', '.ixs',
+                    '.mxs', '.atx', '.shp.xml', '.cpg']
+        # .qix is the OGR index, all other extensions are listed
+        # on wikipedia
         absname = os.path.realpath(self._filename)
         dir = os.path.dirname(absname)
         nameroot, nameext = os.path.splitext(os.path.basename(absname))
@@ -89,8 +102,7 @@ class ShpWriter(object):
             os.unlink(f)
 
     def _create_shp(self):
-        drv = ogr.GetDriverByName('ESRI Shapefile')
-        self._ds = drv.CreateDataSource(self._filename)
+        self._ds = self._drv.CreateDataSource(self._filename)
         self._lyr = self._ds.CreateLayer( "points", self._srs, self._geom_type)
 
     def _add_fields(self):
