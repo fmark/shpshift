@@ -29,6 +29,21 @@ def get_header(parser, options):
             # which non-autodetect header flag was passed?
             return shpshift.Header.FIRSTROW if options.header else shpshift.Header.NONE
 
+def get_prj_col(parser, options):
+    prj_col_val, prj_col_is_numeric, prj_col_defined = (None, None, False)
+    
+    if not options.srscol is None:
+        if not options.srscolidx is None:
+            print_error("Cannot define both input column name and input column index.")
+        prj_col_val = options.srscol
+        prj_col_defined = True
+        prj_col_is_numeric = False
+    if not options.srscolidx is None:
+        prj_col_val = int(options.srscolidx)
+        prj_col_defined = True
+        prj_col_is_numeric = True
+    return (prj_col_defined, prj_col_val, prj_col_is_numeric)
+
 def selected_geom_options(parser, options):
     selected = [(n, getattr(options, n))
                 for n in ['geometrycolumnname',
@@ -68,6 +83,14 @@ def parse_options():
                       action="store", dest="srs", default=None,
                       help="spatial reference system of the spreadsheet geometry")
 
+    parser.add_option("-c", "--spatial-reference-system-input-column-name",
+                      action="store", dest="srscol", default=None,
+                      help="name of the column containing source spatial reference system")
+
+    parser.add_option("-o", "--spatial-reference-system-input-column-index",
+                      action="store", dest="srscolidx", default=None,
+                      help="index of the column containing source spatial reference system")
+
     parser.add_option("-f", "--force",
                        action="store_true", dest="overwrite", default=False,
                        help="force overwriting of output files")
@@ -102,6 +125,8 @@ if __name__ == '__main__':
                                      'xycolumnindices': (True, True)}[selected[0][0]]
     geom_val = selected[0][1]
 
+    prj_col_defined, prj_col_val, prj_col_is_numeric = get_prj_col(parser, options)
+
     if options.sheetnum < 0:
         print_error("sheet number must be greater than zero")
 
@@ -125,7 +150,7 @@ if __name__ == '__main__':
     except ValueError, e:
         print_error("problem reading spreadsheet: %s" % str(e))
 
-    reader.set_field_geom(geom_val, geom_is_xy, geom_is_numeric)
+    reader.set_field_geom(geom_val, geom_is_xy, geom_is_numeric, prj_col_defined, prj_col_val, prj_col_is_numeric)
     
     writer = shpshift.ShpWriter(output_filename, reader=reader, srs=options.srs, overwrite=options.overwrite)
     writer.write()

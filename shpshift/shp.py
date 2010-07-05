@@ -27,6 +27,7 @@ class ShpWriter(object):
             self._srs = osr.SpatialReference()
             self._srs.SetFromUserInput(srs)
 
+        self._srs_transforms = {}
         self._drv = ogr.GetDriverByName('ESRI Shapefile')
         self._overwrite = overwrite
         if overwrite:
@@ -38,7 +39,6 @@ class ShpWriter(object):
         self._detect_geom()
         self._create_shp()
         self._add_fields()
-
 
     def _write_row(self, row, lyr_dfn):
         # write attributes
@@ -65,6 +65,9 @@ class ShpWriter(object):
                     return
                 geom = ogr.Geometry(ogr.wkbPoint)
                 geom.SetPoint_2D(0, x, y)
+            # Transform the SRS if necessary
+            if not (self._prj_col is None or row[self._prj_col] is None):
+                self._transform_geom(geom, row[self._prj_col])
             # Save geometry
             feat.SetGeometry(geom)
             self._lyr.CreateFeature(feat)
@@ -80,6 +83,14 @@ class ShpWriter(object):
         lyr_dfn = self._lyr.GetLayerDefn()
         for row in self._reader.read():
             self._write_row(row, lyr_dfn)
+
+    def _transform_geom(self, geom, srs_str):
+        if not srs_str in self._srs_transforms:
+            to_srs = osr.SpatialReference()
+            to_srs.SetFromUserInput(srs_str)
+            self._srs_transforms[srs_str] = osr.CoordinateTransformation(
+                self._srs, to_srs)
+        geom.Transform(self._srs_transforms[srs_str])
 
     def _find_shapefiles(self):
         shp_exts = ['.shp', '.shx', '.dbf', '.prj', '.sbn', '.sbx', 
@@ -124,25 +135,25 @@ class ShpWriter(object):
                 field_defn.Destroy()
 
     def _detect_geom(self):
+        self._prj_col = None
         self._geom_cols = []
         found = set()
         for i, f in enumerate(self._reader.fields):
             if f.geometry == ColumnGeometry.GEOM:
                 self._geom_cols = [i]
                 self._geom_type = self._detect_geom_type(i)
-                break
             elif f.geometry == ColumnGeometry.X and not 'x' in found:
                 self._geom_cols.append(i)
                 self._geom_type = ogr.wkbPoint
                 found.add('x')
-                if len(self._geom_cols) >= 2:
-                    break
             elif f.geometry == ColumnGeometry.Y and not 'y' in found:
                 self._geom_cols.append(i)
                 self._geom_type = ogr.wkbPoint
                 found.add('y')
-                if len(self._geom_cols) >= 2:
-                    break
+            elif f.geometry == ColumnGeometry.SRS:
+                if self._srs is None:
+                    InvalidGeometryError, "Cannot transform coordinate systems if no output coordinate system is set"
+                self._prj_col = i
         if len(self._geom_cols) == 0:
             raise InvalidGeometryError, "No geometry column set"
                 

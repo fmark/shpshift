@@ -5,7 +5,7 @@ VERSION = "0.1"
 
 Header = Enum(['NONE', 'FIRSTROW', 'AUTODETECT'])
 ColumnType = Enum(['INT', 'REAL', 'STRING', 'DATE', 'TIME', 'DATETIME', 'BOOL'])
-ColumnGeometry = Enum(['NONE', 'GEOM', 'X', 'Y'])
+ColumnGeometry = Enum(['NONE', 'GEOM', 'X', 'Y', 'SRS'])
 Column = namedtuple('Column', 'name type geometry')
 
 class InvalidFilenameError(ValueError):

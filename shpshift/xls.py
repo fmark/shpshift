@@ -77,7 +77,7 @@ class XlsReader(object):
         if self._header == Header.FIRSTROW:
             col_names = [str(x.value) for x in self._sheet.row(0)]
         else:
-            col_names = ["Field%03d" % x for x in range(len(typerow))]
+            col_names = ["Field%03d" % x for x in range(len(self._sheet.row(typerow_idx)))]
 
         # detect the datatypes of the cells.  If the cell is blank, skip it and try the next row
         ncols = len(col_names)
@@ -122,15 +122,58 @@ class XlsReader(object):
         self.__fields = None
 
         for cell in self._sheet.row(0):
-            if cell.ctype != xlrd.XL_CELL_TEXT:
+            if not cell.ctype in [xlrd.XL_CELL_TEXT, xlrd.XL_CELL_EMPTY]:
                 return Header.NONE
 
         for cell in self._sheet.row(1):
-            if cell.ctype != xlrd.XL_CELL_TEXT:
+            if not cell.ctype in [xlrd.XL_CELL_TEXT, xlrd.XL_CELL_EMPTY]:
                 return Header.FIRSTROW
 
         # All cells in the second row are text
         return Header.NONE
 
-    def set_field_geom(self, geom_val, geom_is_xy, geom_is_numeric):
-        self.__fields = set_field_geometry(self.fields, geom_val, geom_is_xy, geom_is_numeric)
+    def set_field_geom(self, geom_val, geom_is_xy, geom_is_numeric, prj_col_defined, prj_col_val, prj_col_is_numeric):
+        fields = self.fields
+        if geom_is_numeric:
+            if geom_is_xy:
+                fields[geom_val[0]] = Column(fields[geom_val[0]].name, fields[geom_val[0]].type, ColumnGeometry.X)
+                fields[geom_val[1]] = Column(fields[geom_val[1]].name, fields[geom_val[1]].type, ColumnGeometry.Y)
+            else:
+                fields[geom_val] = Column(fields[geom_val].name, fields[geom_val].type, ColumnGeometry.GEOM)
+        else:
+            if geom_is_xy:
+                found = set()
+                for i, f in enumerate(list(fields)):
+                    if len(found) >= 2:
+                        break
+                    if f.name.lower() == geom_val[0].lower():
+                        fields[i] = Column(f.name, f.type, ColumnGeometry.X)
+                        found.add('x')
+                    elif f.name.lower() == geom_val[1].lower():
+                        fields[i] = Column(f.name, f.type, ColumnGeometry.Y)
+                        found.add('y')
+                if len(found) != 2:
+                    raise KeyError, "Could not find geometry columns '%s' and '%s'" % (geom_val[0], geom_val[1])
+            else:
+                found = False
+                for i, f in enumerate(list(fields)):
+                    if f.name.lower() == geom_val.lower():
+                        fields[i] = Column(f.name, f.type, ColumnGeometry.GEOM)
+                        found = True
+                        break
+                if not found:
+                    raise KeyError, "Could not find geometry column '%s'" % geom_val
+            if prj_col_defined:
+                if prj_col_is_numeric:
+                    fields[prj_col_val] = Column(fields[prj_col_val].name, fields[prj_col_val].type, ColumnGeometry.SRS)
+                else:
+                    found = False
+                    for i, f in enumerate(list(fields)):
+                        if f.name.lower() == prj_col_val.lower():
+                            fields[i] = Column(f.name, f.type, ColumnGeometry.SRS)
+                            found = True
+                            break
+                    if not found:
+                        raise KeyError, "Could not find spatial reference system column '%s'" % prj_col_val
+        self._fields = fields
+        return fields
