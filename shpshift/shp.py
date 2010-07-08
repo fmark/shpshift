@@ -39,6 +39,20 @@ class ShpWriter(object):
         self._detect_geom()
         self._create_shp()
         self._add_fields()
+        self._write_utf8()
+
+    def _write_utf8(self):
+        self._ds.SyncToDisk()
+        # ensure that the LDID of the shapefile is zero
+        f = open(self._filename, 'r+b')
+        f.seek(0x1D)
+        f.write('\x00')
+        f.close()
+        # now write out a .cpg file containing the string UTF-8
+        bname, ext = os.path.splitext(self._filename)
+        f = open(bname + '.cpg', 'w')
+        f.write('UTF-8')
+        f.close()
 
     def _write_row(self, row, lyr_dfn):
         # write attributes
