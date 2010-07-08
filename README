@@ -1,0 +1,39 @@
+xls2shp
+
+xls2shp converts an excel spreadsheet in .xls format into a shapefile.  Can create geometry either from WKT in a single cell, or from x,y cells.
+
+It attempts to detect the datatypes of shapefile fields using the excel format strings of cells.  Columns with the format specifier "General" are converted to real numbers, even though they may contain integer or date values.  Thus, set the format string '0' or similar for columns you want an integer field for in the shapefile, and a date specific format for columns you want a date field for in the shapefile.
+
+xls2shp can use the first row of the spreadsheet as a header row, or use no header row at all.  While autodetection of the header row is the default behaviour, it is better to explicitly specify the presence or absence of a header row using the --leading-header or --no-header options.
+
+Usage: xls2shp [options] GEOMETRYOPTION [INPUTFILE] OUTPUTFILE
+
+Options:
+  --version             show program's version number and exit
+  -h, --help            show this help message and exit
+  -s SHEETNUM, --sheet-index=SHEETNUM
+                        index of the sheet to convert, starting from 0
+                        (defaults to 0)
+  -g GEOMETRYCOLUMNNAME, --geometry-column-name=GEOMETRYCOLUMNNAME
+                        name of the column containing feature geometry
+  -i GEOMETRYCOLUMNINDEX, --geometry-column-index=GEOMETRYCOLUMNINDEX
+                        index of the column containing feature geometry,
+                        starting from 0
+  -x XYCOLUMNNAMES, --xy-column-names=XYCOLUMNNAMES
+                        names of the two columns containing x y point values
+  -y XYCOLUMNINDICES, --xy-column-indices=XYCOLUMNINDICES
+                        indices of the two columns containing x y point
+                        values, starting from 0
+  -r SRS, --spatial-reference-system=SRS
+                        spatial reference system of the spreadsheet geometry
+  -c SRSCOL, --spatial-reference-system-input-column-name=SRSCOL
+                        name of the column containing source spatial reference
+                        system
+  -o SRSCOLIDX, --spatial-reference-system-input-column-index=SRSCOLIDX
+                        index of the column containing source spatial
+                        reference system
+  -f, --force           force overwriting of output files
+  -l, --leading-header  leading row of the spreadsheet is a header
+  -n, --no-header       leading row of the spreadsheet is not a header
+  -d, --detect-header   try to detect if the leading row of the spreadsheet is
+                        a header [default]
