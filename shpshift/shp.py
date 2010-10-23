@@ -41,19 +41,19 @@ class ShpWriter(object):
         
         
     def _create_shp(self):
+        self._detect_geom()
         drv = ogr.GetDriverByName( 'ESRI Shapefile' )
+
         try:
             self._ds = drv.CreateDataSource(self._filename)
             self._lyr = self._ds.CreateLayer( "points", self._srs, ogr.wkbPoint )
         except Exception, e:
             raise IOError, "Could not create shapefile '%s': %s" % (self._filename, e)
-        self._detect_geom()
-        self._create_shp()
         self._add_fields()
         self._write_utf8()
 
     def _write_utf8(self):
-        self._ds.SyncToDisk()
+        self._lyr.SyncToDisk()
         # ensure that the LDID of the shapefile is zero
         f = open(self._filename, 'r+b')
         f.seek(0x1D)
@@ -116,7 +116,6 @@ class ShpWriter(object):
             self._srs_transforms[srs_str] = osr.CoordinateTransformation(
                 self._srs, to_srs)
         geom.Transform(self._srs_transforms[srs_str])
->>>>>>> origin/master
 
     def _find_shapefiles(self):
         shp_exts = ['.shp', '.shx', '.dbf', '.prj', '.sbn', '.sbx', 
@@ -127,8 +126,7 @@ class ShpWriter(object):
         absname = os.path.realpath(self._filename)
         dir = os.path.dirname(absname)
         nameroot, nameext = os.path.splitext(os.path.basename(absname))
-
-        files = []
+        
         for f in glob.glob("%s%s%s%s" % (dir, os.path.sep, nameroot, '.*')):
             _, ext = os.path.splitext(f)
             if ext in shp_exts:
@@ -143,9 +141,6 @@ class ShpWriter(object):
         for f in self._find_shapefiles():
             os.unlink(f)
 
-    def _create_shp(self):
-        self._ds = self._drv.CreateDataSource(self._filename)
-        self._lyr = self._ds.CreateLayer( "points", self._srs, self._geom_type)
 
     def _add_fields(self):
         def fields_to_ogr(fields):
@@ -183,10 +178,12 @@ class ShpWriter(object):
                 found.add('y')
             elif f.geometry == ColumnGeometry.SRS:
                 if self._srs is None:
-                    InvalidGeometryError, "Cannot transform coordinate systems if no output coordinate system is set"
-                self._prj_col = i
+                    AttributeError, "Cannot transform coordinate systems if no output coordinate system is set"
+
         if len(self._geom_cols) == 0:
-            raise InvalidGeometryError, "No geometry column set"
+            raise AttributeError, "No geometry column set"
+
+        
                 
     def _detect_geom_type(self, colnum):
         row = self._reader.row(0)
@@ -212,6 +209,6 @@ class ShpWriter(object):
         try:
             return lookup_geom[geom_type]
         except KeyError:
-            raise InvalidGeometryError, "Could not determine geometry type for '%s'" % cell
+            raise AttributeError, "Could not determine geometry type for '%s'" % cell
                        
                            
